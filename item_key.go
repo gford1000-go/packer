@@ -19,15 +19,6 @@ type EnvelopeKeyProvider interface {
 	Decrypt(encryptedKey []byte) ([]byte, error)
 }
 
-// serialiseI64 ensures a standard treatment of int64 serialisation
-func serialiseI64(v int64) ([]byte, error) {
-	b, _, err := serialise.ToBytes(v, serialise.WithSerialisationApproach(serialise.NewMinDataApproachWithVersion(serialise.V1)))
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
 // EnvelopeKeyID type distinguishes envelope key identifiers from other strings
 type EnvelopeKeyID string
 
@@ -125,17 +116,7 @@ func (e *evKeyProvider) New() ([]byte, []byte, error) {
 	return append(e.prefix, encryptedKey...), newKey, nil
 }
 
-func deserialiseI64(data []byte) (int64, error) {
-	v, err := serialise.FromBytes(data, serialise.NewMinDataApproachWithVersion(serialise.V1))
-	if err != nil {
-		return 0, err
-	}
-	if i, ok := v.(int64); ok {
-		return i, nil
-	}
-	panic("Should never have an issue deserialising int64")
-}
-
+// ErrKeyProviderDecryptError raised if the provided encryptedKey data cannot be decrypted correctly
 var ErrKeyProviderDecryptError = errors.New("invalid encrypted key provided - failed to decrypt")
 
 func (e *evKeyProvider) Decrypt(encryptedKey []byte) ([]byte, error) {
