@@ -16,6 +16,7 @@ type Item[T comparable] struct {
 	Attributes map[string]any
 }
 
+// Options allow the packing process to adjusted as desired
 type Options struct {
 	// Which packing mechanism is used
 	packingVersion PackVersion
@@ -158,7 +159,9 @@ const (
 	defaultPackingVersion       PackVersion = V1
 )
 
-// Pack
+// Pack will serialise the contents of the specified item, using the mechanism specified by the params, with
+// optional overrides in behaviour via the options
+// Packing will default to the selection of defaultPackingVersion for the serialisation, if not overridden.
 func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Options)) (info []byte, itemData map[T]map[string][]byte, e error) {
 
 	defer func() {
@@ -243,20 +246,30 @@ func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Opti
 	return data, attrData, nil
 }
 
+// DataLoader retrieves the data stored against the specified keys, combining into a single
+// map as the attributes are assumed to all be unuquely named.
 type DataLoader[T comparable] func(ctx context.Context, keys []T) (map[string][]byte, error)
 
+// GetIDSerialiser retrieves the IDSerialiser associated with the specified name
 type GetIDSerialiser[T comparable] func(name string) (IDSerialiser[T], error)
 
+// UnpackParams are the parameters to be used when unpacking data serialised with Pack()
 type UnpackParams[T comparable] struct {
-	DataLoader  DataLoader[T]
+	// DataLoader specifies how attribute values should be retrieved from storage
+	DataLoader DataLoader[T]
+	// IDRetriever specifies how keys can be deserialised
 	IDRetriever GetIDSerialiser[T]
-	Provider    EnvelopeKeyProvider
+	// Provider specifies an EnvelopeKeyProvider that can decrypt the encryption key for the attribute data
+	Provider EnvelopeKeyProvider
 }
 
+// ErrDataLoaderIsNil raised if no data loader is specified in the UnpackParams passed to Unpack
 var ErrDataLoaderIsNil = errors.New("data loader must not be nil, to allow attribute values to be retrieved")
 
+// ErrIDRetrieverIsNil raised if no id retriever is specified in the UnpackParams passed to Unpack
 var ErrIDRetrieverIsNil = errors.New("id retriever must be provided, to allow key information to be deserialised")
 
+// ErrProviderIsNil raised if no provider is specified in the UnpackParams passed to Unpack
 var ErrProviderIsNil = errors.New("provider must be specified, to allow decription of encryption data for attribute values")
 
 func (u *UnpackParams[T]) validate() error {
@@ -272,10 +285,13 @@ func (u *UnpackParams[T]) validate() error {
 	return nil
 }
 
+// ErrUnpackNoData raised if there is no data to attempt to Unpack
 var ErrUnpackNoData = errors.New("no data to unpack")
 
+// ErrUnpackNoParams raised is no parameters are passed to Unpack
 var ErrUnpackNoParams = errors.New("params must be provided to Unpack")
 
+// ErrUnpackInvalidData raised if the data does not deserialise
 var ErrUnpackInvalidData = errors.New("unable to unpack - invalid data")
 
 // Unpack deserialises a byte slice that was prepared using Pack
