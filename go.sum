@@ -1,2 +1,4 @@
 github.com/gford1000-go/serialise v0.0.0-20250223103704-1bfeeaa8e26e h1:0Kn06vFMDsRSrVstsTbvw/1ynMVRVgvgH26Xh8ry20M=
 github.com/gford1000-go/serialise v0.0.0-20250223103704-1bfeeaa8e26e/go.mod h1:+P7vL58+Kzbgl8mVDlAnJ05wxhO7IU8VVGVug/M9pMM=
+github.com/gford1000-go/serialise v0.0.0-20250223120714-247ebedf6794 h1:yEr1XtXjcrS9jUfvDufM23LaQ7QW3Y7RBGzzV0E6Ss8=
+github.com/gford1000-go/serialise v0.0.0-20250223120714-247ebedf6794/go.mod h1:+P7vL58+Kzbgl8mVDlAnJ05wxhO7IU8VVGVug/M9pMM=
