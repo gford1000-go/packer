@@ -71,19 +71,11 @@ func NewEnvelopeKeyProvider(keyInfo *EnvelopeKeyProviderInfo, finder EnveloperKe
 	o := serialise.Options{}
 	serialise.WithAESGCMEncryption(keyInfo.Key)(&o)
 
-	b := []byte(keyInfo.ID)
-	bs, err := serialise.ToBytesI64(int64(len(b)))
-	if err != nil {
-		return nil, err
-	}
-
 	return &evKeyProvider{
 		dec:    o.Decryptor,
 		enc:    o.Encryptor,
 		finder: finder,
 		id:     keyInfo.ID,
-		l:      int64(len(bs)),
-		prefix: append(bs, b...),
 	}, nil
 }
 
@@ -92,8 +84,6 @@ type evKeyProvider struct {
 	enc    func([]byte) ([]byte, error)
 	finder EnveloperKeyProviderFinder
 	id     EnvelopeKeyID
-	l      int64
-	prefix []byte
 }
 
 func (e *evKeyProvider) ID() EnvelopeKeyID {
@@ -113,7 +103,16 @@ func (e *evKeyProvider) New() ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 
-	return append(e.prefix, encryptedKey...), newKey, nil
+	b, _, err := serialise.ToBytesMany(
+		[]any{
+			string(e.id),
+			encryptedKey,
+		}, serialise.WithSerialisationApproach(serialise.NewMinDataApproachWithVersion(serialise.V1)))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return b, newKey, nil
 }
 
 // ErrKeyProviderDecryptError raised if the provided encryptedKey data cannot be decrypted correctly
@@ -121,29 +120,32 @@ var ErrKeyProviderDecryptError = errors.New("invalid encrypted key provided - fa
 
 func (e *evKeyProvider) Decrypt(encryptedKey []byte) ([]byte, error) {
 
-	if int64(len(encryptedKey)) < e.l {
-		return nil, ErrKeyProviderDecryptError
-	}
-
-	idSize, err := serialise.FromBytesI64(encryptedKey[0:e.l])
+	v, err := serialise.FromBytesMany(encryptedKey, serialise.NewMinDataApproachWithVersion(serialise.V1))
 	if err != nil {
 		return nil, err
 	}
 
-	if int64(len(encryptedKey)) < idSize+e.l {
-		return nil, ErrKeyProviderDecryptError
+	if len(v) != 2 {
+		return nil, ErrKeyDeserialisationError
 	}
-	id := EnvelopeKeyID(encryptedKey[e.l : e.l+idSize])
 
-	// Could be that we have a valid encryptedKey, but using another envelope key.
-	// This should not generate an error if we can locate the other key.
-	if id != e.id {
-		other, err := e.finder(id)
+	id, ok := v[0].(string)
+	if !ok {
+		return nil, ErrKeyDeserialisationError
+	}
+
+	if EnvelopeKeyID(id) != e.id {
+		other, err := e.finder(EnvelopeKeyID(id))
 		if err != nil {
 			return nil, err
 		}
 		return other.Decrypt(encryptedKey)
 	}
 
-	return e.dec(encryptedKey[e.l+idSize:])
+	key, ok := v[1].([]byte)
+	if !ok {
+		return nil, ErrKeyDeserialisationError
+	}
+
+	return e.dec(key)
 }
