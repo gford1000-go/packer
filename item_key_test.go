@@ -2,6 +2,7 @@ package packer
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/rand"
 	"errors"
@@ -39,7 +40,7 @@ func TestNewEnvelopeKeyProvider(t *testing.T) {
 			t.Fatalf("Unexpected error creating new key: %v", err)
 		}
 
-		key2, err := provider.Decrypt(enc)
+		key2, err := provider.Decrypt(context.TODO(), enc)
 		if err != nil {
 			t.Fatalf("Unexpected error decrypting key: %v", err)
 		}
@@ -119,7 +120,7 @@ func TestNewEnvelopeKeyProvider_1(t *testing.T) {
 			t.Fatalf("Unexpected error creating new key: %v", err)
 		}
 
-		key2, err := chooseSecondProvider(provider.ID()).Decrypt(enc)
+		key2, err := chooseSecondProvider(provider.ID()).Decrypt(context.TODO(), enc)
 		if err != nil {
 			t.Fatalf("Unexpected error decrypting key: %v", err)
 		}

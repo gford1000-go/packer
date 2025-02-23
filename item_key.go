@@ -1,6 +1,7 @@
 package packer
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/rand"
 	"errors"
@@ -16,7 +17,7 @@ type EnvelopeKeyProvider interface {
 	// New returns a unique key as to parts: pre-encrypted byte slice, and the key itself
 	New() ([]byte, []byte, error)
 	// Decrypted returns the key from the pre-encrypted byte slice returned by New()
-	Decrypt(encryptedKey []byte) ([]byte, error)
+	Decrypt(ctx context.Context, encryptedKey []byte) ([]byte, error)
 }
 
 // EnvelopeKeyID type distinguishes envelope key identifiers from other strings
@@ -118,7 +119,7 @@ func (e *evKeyProvider) New() ([]byte, []byte, error) {
 // ErrKeyProviderDecryptError raised if the provided encryptedKey data cannot be decrypted correctly
 var ErrKeyProviderDecryptError = errors.New("invalid encrypted key provided - failed to decrypt")
 
-func (e *evKeyProvider) Decrypt(encryptedKey []byte) ([]byte, error) {
+func (e *evKeyProvider) Decrypt(ctx context.Context, encryptedKey []byte) ([]byte, error) {
 
 	v, err := serialise.FromBytesMany(encryptedKey, serialise.NewMinDataApproachWithVersion(serialise.V1))
 	if err != nil {
@@ -139,7 +140,7 @@ func (e *evKeyProvider) Decrypt(encryptedKey []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return other.Decrypt(encryptedKey)
+		return other.Decrypt(ctx, encryptedKey)
 	}
 
 	key, ok := v[1].([]byte)

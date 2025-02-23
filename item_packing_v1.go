@@ -1,6 +1,7 @@
 package packer
 
 import (
+	"context"
 	c "crypto/rand"
 	"errors"
 	"math/big"
@@ -10,16 +11,11 @@ import (
 )
 
 type itemPackingDetailsV1[T comparable] struct {
-	key      T
-	attrs    map[string]any
-	params   *PackParams[T]
-	opts     *Options
-	elements []T
-	attrMap  map[string][]string
-	valMap   map[string][]byte
+	params *PackParams[T]
+	opts   *Options
 }
 
-func (d *itemPackingDetailsV1[T]) pack(encryptedKey, encKey []byte) ([]byte, map[T]map[string][]byte, error) {
+func (d *itemPackingDetailsV1[T]) pack(item *Item[T], encryptedKey, encKey []byte) ([]byte, map[T]map[string][]byte, error) {
 
 	if d.opts == nil {
 		d.opts = &Options{}
@@ -29,20 +25,226 @@ func (d *itemPackingDetailsV1[T]) pack(encryptedKey, encKey []byte) ([]byte, map
 	} else {
 		d.opts.serialiseOptions = append(d.opts.serialiseOptions, serialise.WithSerialisationApproach(d.params.Approach))
 	}
+	d.opts.serialiseOptions = append(d.opts.serialiseOptions, serialise.WithAESGCMEncryption(encKey))
 
-	err := d.createMaps()
+	attrMap, valMap, err := d.createMaps(item.Attributes)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return nil, nil, nil
+	elements, output := d.createElements(item.Key, valMap)
+
+	bKey, err := d.params.Packer.Pack(item.Key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	bAttrMap, err := d.packAttrMap(attrMap)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	bElements, err := d.packElementsSlice(elements)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Encrypt these details, so they are only accessible if envelope key is available
+	packData := []any{
+		bKey,
+		bAttrMap,
+		bElements,
+	}
+	b, _, err := serialise.ToBytesMany(packData, d.opts.serialiseOptions...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Final envelope of information that allows unpacking; can be visible
+	finalisedData := []any{
+		encryptedKey,
+		d.params.Packer.Name(),
+		d.params.Approach.Name(),
+		b,
+	}
+
+	// Always use V1 to guarantee we can bootstrap back to the finalised data
+	b, _, err = serialise.ToBytesMany(finalisedData, serialise.WithSerialisationApproach(serialise.NewMinDataApproachWithVersion(serialise.V1)))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Output is returned separately, as all attribute data values are encrypted and attribute names are randomised
+	return b, output, nil
 }
 
-func (d *itemPackingDetailsV1[T]) packElementsSlice() ([]byte, error) {
+var ErrInvalidDataToUnpack = errors.New("the provided data cannot not be deserialised")
 
-	eles := make([]any, len(d.elements))
+func (d *itemPackingDetailsV1[T]) unpack(ctx context.Context, data []byte, envKeyProvider EnvelopeKeyProvider, loader DataLoader[T], idRetriever GetIDSerialiser[T]) (*EncryptedItem[T], error) {
 
-	for i, ele := range d.elements {
+	// Always use V1 to guarantee we can bootstrap back to the finalised data
+	finalisedData, err := serialise.FromBytesMany(data, serialise.NewMinDataApproachWithVersion(serialise.V1))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(finalisedData) != 4 {
+		return nil, ErrInvalidDataToUnpack
+	}
+
+	encryptedKey, ok := finalisedData[0].([]byte)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+
+	packerName, ok := finalisedData[1].(string)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+	packer, err := idRetriever(packerName)
+	if err != nil {
+		return nil, err
+	}
+
+	approachName, ok := finalisedData[2].(string)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+	approach, err := serialise.GetApproach(approachName)
+	if err != nil {
+		return nil, err
+	}
+
+	b, ok := finalisedData[3].([]byte)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+
+	encKey, err := envKeyProvider.Decrypt(ctx, encryptedKey)
+	if err != nil {
+		return nil, err
+	}
+
+	packData, err := serialise.FromBytesMany(b, approach, serialise.WithAESGCMEncryption(encKey))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(packData) != 3 {
+		return nil, ErrInvalidDataToUnpack
+	}
+
+	bKey, ok := packData[0].([]byte)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+
+	key, err := packer.Unpack(bKey)
+	if err != nil {
+		return nil, err
+	}
+
+	bAttrMap, ok := packData[1].([]byte)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+
+	attrMap, err := d.unpackAttrMap(bAttrMap, approach)
+	if err != nil {
+		return nil, err
+	}
+
+	bElements, ok := packData[2].([]byte)
+	if !ok {
+		return nil, ErrInvalidDataToUnpack
+	}
+	elements, err := d.unpackElementsSlice(bElements, approach, packer)
+	if err != nil {
+		return nil, err
+	}
+
+	md, err := loader(ctx, elements)
+	if err != nil {
+		return nil, err
+	}
+
+	dataMap := map[string][]byte{}
+
+	for k, v := range attrMap {
+		b := []byte{}
+		for _, a := range v {
+			if part, ok := md[a]; !ok {
+				return nil, ErrInvalidDataToUnpack
+			} else {
+				b = append(b, part...)
+			}
+		}
+		dataMap[k] = b
+	}
+
+	output := &EncryptedItem[T]{
+		key:          key,
+		approach:     approach,
+		encryptedKey: encryptedKey,
+		attributes:   dataMap,
+	}
+
+	return output, nil
+}
+
+func (d *itemPackingDetailsV1[T]) createElements(key T, vals map[string][]byte) ([]T, map[T]map[string][]byte) {
+	// For now, no splitting into elements
+	return []T{key}, map[T]map[string][]byte{
+		key: vals,
+	}
+}
+
+func (d *itemPackingDetailsV1[T]) packAttrMap(attrMap map[string][]string) ([]byte, error) {
+
+	items := make([]any, len(attrMap))
+
+	i := 0
+	for k, v := range attrMap {
+		item := []string{k}
+		item = append(item, v...)
+		items[i] = item
+		i++
+	}
+
+	b, _, err := serialise.ToBytesMany(items, serialise.WithSerialisationApproach(d.params.Approach))
+	return b, err
+}
+
+var ErrInvalidDataToDeserialiseAttrMap = errors.New("invalid data, cannot deserialise attribute map")
+
+func (d *itemPackingDetailsV1[T]) unpackAttrMap(data []byte, approach serialise.Approach) (map[string][]string, error) {
+
+	v, err := serialise.FromBytesMany(data, approach)
+	if err != nil {
+		return nil, err
+	}
+
+	attrMap := make(map[string][]string, len(v))
+
+	for i := 0; i < len(v); i++ {
+		ss, ok := v[i].([]string)
+		if !ok {
+			return nil, ErrInvalidDataToDeserialiseAttrMap
+		}
+		if len(ss) < 2 {
+			return nil, ErrInvalidDataToDeserialiseAttrMap
+		}
+		attrMap[ss[0]] = ss[1:]
+	}
+
+	return attrMap, nil
+}
+
+func (d *itemPackingDetailsV1[T]) packElementsSlice(elements []T) ([]byte, error) {
+
+	eles := make([]any, len(elements))
+
+	for i, ele := range elements {
 		b, err := d.params.Packer.Pack(ele)
 		if err != nil {
 			return nil, err
@@ -50,17 +252,17 @@ func (d *itemPackingDetailsV1[T]) packElementsSlice() ([]byte, error) {
 		eles[i] = b
 	}
 
-	b, _, err := serialise.ToBytesMany(eles, d.opts.serialiseOptions...)
+	b, _, err := serialise.ToBytesMany(eles, serialise.WithSerialisationApproach(d.params.Approach))
 	return b, err
 }
 
 var ErrInvalidDataToDeserialiseElements = errors.New("invalid data, cannot deserialise element slice")
 
-func (d *itemPackingDetailsV1[T]) unpackElementsSlice(data []byte) error {
+func (d *itemPackingDetailsV1[T]) unpackElementsSlice(data []byte, approach serialise.Approach, packer IDSerialiser[T]) ([]T, error) {
 
-	v, err := serialise.FromBytesMany(data, d.params.Approach, d.opts.serialiseOptions...)
+	v, err := serialise.FromBytesMany(data, approach)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	elements := make([]T, len(v))
@@ -68,30 +270,30 @@ func (d *itemPackingDetailsV1[T]) unpackElementsSlice(data []byte) error {
 	for i := 0; i < len(v); i++ {
 		b, ok := v[i].([]byte)
 		if !ok {
-			return ErrInvalidDataToDeserialiseElements
+			return nil, ErrInvalidDataToDeserialiseElements
 		}
 
-		t, err := d.params.Packer.Unpack(b)
+		t, err := packer.Unpack(b)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		elements[i] = t
 	}
 
-	d.elements = elements
-	return nil
+	return elements, nil
 }
 
-func (d *itemPackingDetailsV1[T]) createMaps() error {
+func (d *itemPackingDetailsV1[T]) createMaps(attrs map[string]any) (map[string][]string, map[string][]byte, error) {
 	used := map[string]bool{}
 	attrMap := map[string][]string{}
 	valMap := map[string][]byte{}
 
-	for k, v := range d.attrs {
+	for k, v := range attrs {
+		// Individual attribute values are serialised using the user options - which will include encryption
 		b, _, err := serialise.ToBytes(v, d.opts.serialiseOptions...)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 
 		// Where the serialised value exceedes the max size allowed, then
@@ -102,7 +304,7 @@ func (d *itemPackingDetailsV1[T]) createMaps() error {
 		for len(b) > int(d.opts.maxAttrValueSize) {
 			an, err := d.uniqueAttributeName(used)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			valMap[an] = b[0:d.opts.maxAttrValueSize]
 			attrMap[k] = append(attrMap[k], an)
@@ -110,16 +312,13 @@ func (d *itemPackingDetailsV1[T]) createMaps() error {
 		}
 		an, err := d.uniqueAttributeName(used)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		valMap[an] = b
 		attrMap[k] = append(attrMap[k], an)
 	}
 
-	// Only store if all attributes serialised correctly
-	d.attrMap = attrMap
-	d.valMap = valMap
-	return nil
+	return attrMap, valMap, nil
 }
 
 // ErrUnableToCreateUniqueName raised if a unique attribute name cannot be determined before running out of retries

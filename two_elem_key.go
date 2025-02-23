@@ -85,8 +85,8 @@ func (k *keySerialiser) Name() string {
 }
 
 func (k *keySerialiser) Pack(key Key) ([]byte, error) {
-
-	return k.a.Pack([]string{key.X, key.Y})
+	b, _, err := serialise.ToBytes([]string{key.X, key.Y}, serialise.WithSerialisationApproach(k.a))
+	return b, err
 }
 
 // ErrKeyDeserialisationError is raised when data does not deserialise to a Key instance
@@ -94,7 +94,7 @@ var ErrKeyDeserialisationError = errors.New("invalid data passed - cannot deseri
 
 func (k *keySerialiser) Unpack(data []byte) (Key, error) {
 
-	v, err := k.a.Unpack(data)
+	v, err := serialise.FromBytes(data, k.a)
 	if err != nil {
 		return Key{}, err
 	}

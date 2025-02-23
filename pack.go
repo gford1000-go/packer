@@ -1,10 +1,20 @@
 package packer
 
 import (
+	"context"
 	"errors"
+	"fmt"
 
 	"github.com/gford1000-go/serialise"
 )
+
+// Item is something to be serialised
+type Item[T comparable] struct {
+	// Key unique identifies this item
+	Key T
+	// Attributes represent the data values of this item
+	Attributes map[string]any
+}
 
 type Options struct {
 	// Which packing mechanism is used
@@ -149,9 +159,15 @@ const (
 )
 
 // Pack
-func Pack[T comparable](key T, attrs map[string]any, params *PackParams[T], opts ...func(*Options)) ([]byte, map[T]map[string][]byte, error) {
+func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Options)) (info []byte, itemData map[T]map[string][]byte, e error) {
 
-	if len(attrs) == 0 {
+	defer func() {
+		if r := recover(); r != nil {
+			e = fmt.Errorf("%v", r)
+		}
+	}()
+
+	if item == nil || len(item.Attributes) == 0 {
 		return nil, nil, ErrPackNoAttributes
 	}
 	if params == nil {
@@ -199,19 +215,111 @@ func Pack[T comparable](key T, attrs map[string]any, params *PackParams[T], opts
 	// Ensure all data is encrypted with this key during serialisation
 	o.serialiseOptions = append(o.serialiseOptions, serialise.WithAESGCMEncryption(encKey))
 
+	var data []byte
+	var attrData map[T]map[string][]byte
+
+	// Process using the selected packing approach
 	switch o.packingVersion {
 	case V1:
 		d := &itemPackingDetailsV1[T]{
-			key:      key,
-			attrs:    attrs,
-			params:   params,
-			opts:     o,
-			elements: []T{},
-			attrMap:  map[string][]string{},
-			valMap:   map[string][]byte{},
+			params: params,
+			opts:   o,
 		}
-		return d.pack(encryptedKey, encKey)
+		data, attrData, err = d.pack(item, encryptedKey, encKey)
 	default:
-		return nil, nil, ErrUnsupportedPackVersion
+		err = ErrUnsupportedPackVersion
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Prefix with the packingVersion selected
+	data, _, err = serialise.ToBytesMany([]any{int8(o.packingVersion), data}, serialise.WithSerialisationApproach(serialise.NewMinDataApproachWithVersion(serialise.V1)))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return data, attrData, nil
+}
+
+type DataLoader[T comparable] func(ctx context.Context, keys []T) (map[string][]byte, error)
+
+type GetIDSerialiser[T comparable] func(name string) (IDSerialiser[T], error)
+
+type UnpackParams[T comparable] struct {
+	DataLoader  DataLoader[T]
+	IDRetriever GetIDSerialiser[T]
+	Provider    EnvelopeKeyProvider
+}
+
+var ErrDataLoaderIsNil = errors.New("data loader must not be nil, to allow attribute values to be retrieved")
+
+var ErrIDRetrieverIsNil = errors.New("id retriever must be provided, to allow key information to be deserialised")
+
+var ErrProviderIsNil = errors.New("provider must be specified, to allow decription of encryption data for attribute values")
+
+func (u *UnpackParams[T]) validate() error {
+	if u.DataLoader == nil {
+		return ErrDataLoaderIsNil
+	}
+	if u.IDRetriever == nil {
+		return ErrIDRetrieverIsNil
+	}
+	if u.Provider == nil {
+		return ErrProviderIsNil
+	}
+	return nil
+}
+
+var ErrUnpackNoData = errors.New("no data to unpack")
+
+var ErrUnpackNoParams = errors.New("params must be provided to Unpack")
+
+var ErrUnpackInvalidData = errors.New("unable to unpack - invalid data")
+
+// Unpack deserialises a byte slice that was prepared using Pack
+func Unpack[T comparable](ctx context.Context, data []byte, params *UnpackParams[T]) (i *EncryptedItem[T], e error) {
+
+	defer func() {
+		if r := recover(); r != nil {
+			e = fmt.Errorf("%v", r)
+		}
+	}()
+
+	if len(data) == 0 {
+		return nil, ErrUnpackNoData
+	}
+	if params == nil {
+		return nil, ErrUnpackNoParams
+	}
+	if err := params.validate(); err != nil {
+		return nil, err
+	}
+
+	v, err := serialise.FromBytesMany(data, serialise.NewMinDataApproachWithVersion(serialise.V1))
+	if err != nil {
+		return nil, err
+	}
+	if len(v) != 2 {
+		return nil, ErrUnpackInvalidData
+	}
+
+	packingVersion, ok := v[0].(int8)
+	if !ok {
+		return nil, ErrUnpackInvalidData
+	}
+
+	b, ok := v[1].([]byte)
+	if !ok {
+		return nil, ErrUnpackInvalidData
+	}
+
+	switch PackVersion(packingVersion) {
+	case V1:
+		d := &itemPackingDetailsV1[T]{}
+		return d.unpack(ctx, b, params.Provider, params.DataLoader, params.IDRetriever)
+	default:
+		return nil, ErrUnsupportedPackVersion
 	}
 }
