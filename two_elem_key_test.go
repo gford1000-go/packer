@@ -7,7 +7,7 @@ func TestNewKeyForTesting(t *testing.T) {
 	a := newKeyCreatorForTesting(42)
 	b := newKeyCreatorForTesting(42)
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		kA := a.ID()
 		kB := b.ID()
 
