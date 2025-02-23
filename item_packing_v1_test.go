@@ -2,6 +2,8 @@ package packer
 
 import (
 	"testing"
+
+	"github.com/gford1000-go/serialise"
 )
 
 func TestItemPackingDetailsV1_PackElementsSlice(t *testing.T) {
@@ -49,8 +51,10 @@ func TestItemPackingDetailsV1_PackElementsSlice(t *testing.T) {
 
 		i := &itemPackingDetailsV1[Key]{
 			params: &PackParams[Key]{
-				Packer: serialiser,
+				Packer:   serialiser,
+				Approach: serialise.NewMinDataApproachWithVersion(serialise.V1),
 			},
+			opts:     &Options{},
 			elements: elements,
 		}
 

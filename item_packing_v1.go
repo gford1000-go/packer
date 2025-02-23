@@ -20,6 +20,16 @@ type itemPackingDetailsV1[T comparable] struct {
 }
 
 func (d *itemPackingDetailsV1[T]) pack(encryptedKey, encKey []byte) ([]byte, map[T]map[string][]byte, error) {
+
+	if d.opts == nil {
+		d.opts = &Options{}
+	}
+	if d.opts.serialiseOptions == nil {
+		d.opts.serialiseOptions = []func(*serialise.Options){serialise.WithSerialisationApproach(d.params.Approach)}
+	} else {
+		d.opts.serialiseOptions = append(d.opts.serialiseOptions, serialise.WithSerialisationApproach(d.params.Approach))
+	}
+
 	err := d.createMaps()
 	if err != nil {
 		return nil, nil, err
@@ -30,67 +40,43 @@ func (d *itemPackingDetailsV1[T]) pack(encryptedKey, encKey []byte) ([]byte, map
 
 func (d *itemPackingDetailsV1[T]) packElementsSlice() ([]byte, error) {
 
-	data := []byte{}
+	eles := make([]any, len(d.elements))
 
-	b, err := serialise.ToBytesI64(int64(len(d.elements)))
-	if err != nil {
-		return nil, err
-	}
-	data = append(data, b...)
-
-	for _, ele := range d.elements {
+	for i, ele := range d.elements {
 		b, err := d.params.Packer.Pack(ele)
 		if err != nil {
 			return nil, err
 		}
-		bs, err := serialise.ToBytesI64(int64(len(b)))
-		if err != nil {
-			return nil, err
-		}
-		data = append(data, bs...)
-		data = append(data, b...)
+		eles[i] = b
 	}
 
-	return data, nil
+	b, _, err := serialise.ToBytesMany(eles, d.opts.serialiseOptions...)
+	return b, err
 }
 
 var ErrInvalidDataToDeserialiseElements = errors.New("invalid data, cannot deserialise element slice")
 
 func (d *itemPackingDetailsV1[T]) unpackElementsSlice(data []byte) error {
 
-	size := serialise.SizeOfI64()
-
-	if int64(len(data)) < size {
-		return ErrInvalidDataToDeserialiseElements
-	}
-
-	b := data[0:size]
-	numEles, err := serialise.FromBytesI64(b)
+	v, err := serialise.FromBytesMany(data, d.params.Approach, d.opts.serialiseOptions...)
 	if err != nil {
 		return err
 	}
 
-	elements := make([]T, numEles)
+	elements := make([]T, len(v))
 
-	data = data[size:]
-
-	var i int64
-	for i = 0; i < numEles; i++ {
-
-		sizeT, err := serialise.FromBytesI64(data[0:size])
-		if err != nil {
-			return err
+	for i := 0; i < len(v); i++ {
+		b, ok := v[i].([]byte)
+		if !ok {
+			return ErrInvalidDataToDeserialiseElements
 		}
-
-		b := data[size : size+sizeT]
 
 		t, err := d.params.Packer.Unpack(b)
 		if err != nil {
 			return err
 		}
-		elements[i] = t
 
-		data = data[size+sizeT:]
+		elements[i] = t
 	}
 
 	d.elements = elements
