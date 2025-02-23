@@ -72,7 +72,7 @@ func NewEnvelopeKeyProvider(keyInfo *EnvelopeKeyProviderInfo, finder EnveloperKe
 	serialise.WithAESGCMEncryption(keyInfo.Key)(&o)
 
 	b := []byte(keyInfo.ID)
-	bs, err := serialiseI64(int64(len(b)))
+	bs, err := serialise.ToBytesI64(int64(len(b)))
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (e *evKeyProvider) Decrypt(encryptedKey []byte) ([]byte, error) {
 		return nil, ErrKeyProviderDecryptError
 	}
 
-	idSize, err := deserialiseI64(encryptedKey[0:e.l])
+	idSize, err := serialise.FromBytesI64(encryptedKey[0:e.l])
 	if err != nil {
 		return nil, err
 	}

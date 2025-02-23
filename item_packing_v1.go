@@ -32,7 +32,7 @@ func (d *itemPackingDetailsV1[T]) packElementsSlice() ([]byte, error) {
 
 	data := []byte{}
 
-	b, err := serialiseI64(int64(len(d.elements)))
+	b, err := serialise.ToBytesI64(int64(len(d.elements)))
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (d *itemPackingDetailsV1[T]) packElementsSlice() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		bs, err := serialiseI64(int64(len(b)))
+		bs, err := serialise.ToBytesI64(int64(len(b)))
 		if err != nil {
 			return nil, err
 		}
@@ -58,14 +58,14 @@ var ErrInvalidDataToDeserialiseElements = errors.New("invalid data, cannot deser
 
 func (d *itemPackingDetailsV1[T]) unpackElementsSlice(data []byte) error {
 
-	size := int64(sizeOfSerialisedI64())
+	size := serialise.SizeOfI64()
 
 	if int64(len(data)) < size {
 		return ErrInvalidDataToDeserialiseElements
 	}
 
 	b := data[0:size]
-	numEles, err := deserialiseI64(b)
+	numEles, err := serialise.FromBytesI64(b)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (d *itemPackingDetailsV1[T]) unpackElementsSlice(data []byte) error {
 	var i int64
 	for i = 0; i < numEles; i++ {
 
-		sizeT, err := deserialiseI64(data[0:size])
+		sizeT, err := serialise.FromBytesI64(data[0:size])
 		if err != nil {
 			return err
 		}
