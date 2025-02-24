@@ -96,30 +96,59 @@ func TestPack(t *testing.T) {
 		return eItem
 	}
 
-	input := &Item[Key]{
-		Key: Key{X: "A", Y: "B"},
-		Attributes: map[string]any{
-			"aaa": int64(42),
-			"bbb": []string{"Hello", "World"},
+	tests := []*Item[Key]{
+		{
+			Key: Key{X: "A", Y: "B"},
+			Attributes: map[string]any{
+				"aaa": int8(10),
+			},
+		},
+		{
+			Key: Key{X: "A", Y: "B"},
+			Attributes: map[string]any{
+				"aaa": int64(42),
+				"bbb": []string{"Hello", "World"},
+			},
+		},
+		{
+			Key: Key{X: "A", Y: "B"},
+			Attributes: map[string]any{
+				"ref": Key{X: "C", Y: "D"},
+			},
+		},
+		{
+			Key: Key{X: "A", Y: "B"},
+			Attributes: map[string]any{
+				"ref": &Key{X: "C", Y: "D"},
+			},
+		},
+		{
+			Key: Key{X: "A", Y: "B"},
+			Attributes: map[string]any{
+				"ref": []Key{Key{X: "C", Y: "D"}},
+			},
 		},
 	}
 
-	output := testUnpack(testPack(input))
+	for i, input := range tests {
 
-	if input.Key != output.GetKey() {
-		t.Fatalf("Mismatch in keys: expected: %s, got: %s", input.Key, output.GetKey())
-	}
+		output := testUnpack(testPack(input))
 
-	for k, v := range input.Attributes {
-		m, err := output.GetValues(context.TODO(), []string{k}, provider)
-		if err != nil {
-			t.Fatalf("Unexpected error during value retrieval: %v", err)
+		if input.Key != output.GetKey() {
+			t.Fatalf("(%d) Mismatch in keys: expected: %s, got: %s", i, input.Key, output.GetKey())
 		}
-		v1, ok := m[k]
-		if !ok {
-			t.Fatalf("Unexpected failure to retrieve attribute %s", k)
+
+		for k, v := range input.Attributes {
+			m, err := output.GetValues(context.TODO(), []string{k}, provider)
+			if err != nil {
+				t.Fatalf("(%d) Unexpected error during value retrieval: %v", i, err)
+			}
+			v1, ok := m[k]
+			if !ok {
+				t.Fatalf("(%d) Unexpected failure to retrieve attribute %s", i, k)
+			}
+			compareValue(v1, v, fmt.Sprintf("%T", v), t)
 		}
-		compareValue(v1, v, fmt.Sprintf("%T", v), t)
 	}
 }
 
@@ -157,7 +186,7 @@ func testCompareValue[T comparable](a, b any, name string, t *testing.T, opts ..
 			t.Fatalf("Type mismatch: expected: %s, got: %s", name, fmt.Sprintf("%T", a))
 		}
 	default:
-		t.Fatalf("Unexpected error: b was the wrong type: %s", fmt.Sprintf("%T", b))
+		t.Fatalf("Unexpected error: b was the wrong type: %T (a: %T)", b, a)
 	}
 }
 
@@ -289,6 +318,12 @@ func compareValue(a, b any, name string, t *testing.T) {
 		testComparePtrValue[string](a, b, name, t)
 	case []string:
 		testCompareSliceValue[string](a, b, name, t)
+	case Key:
+		testCompareValue[Key](a, b, name, t)
+	case *Key:
+		testComparePtrValue[Key](a, b, name, t)
+	case []Key:
+		testCompareSliceValue[Key](a, b, name, t)
 	case [][]uint8:
 		bb := b.([][]uint8)
 		if len(bb) != len(v) {

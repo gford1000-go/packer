@@ -187,6 +187,7 @@ func (d *itemPackingDetailsV1[T]) unpack(ctx context.Context, data []byte, envKe
 		approach:     approach,
 		encryptedKey: encryptedKey,
 		attributes:   dataMap,
+		packer:       packer,
 	}
 
 	return output, nil
@@ -290,8 +291,47 @@ func (d *itemPackingDetailsV1[T]) createMaps(attrs map[string]any) (map[string][
 	valMap := map[string][]byte{}
 
 	for k, v := range attrs {
+		var b []byte
+		var err error
 		// Individual attribute values are serialised using the user options - which will include encryption
-		b, _, err := serialise.ToBytes(v, d.opts.serialiseOptions...)
+		switch vv := v.(type) {
+		case T:
+			b, err = d.params.Packer.Pack(vv)
+			if err != nil {
+				return nil, nil, err
+			}
+			b, _, err = serialise.ToBytesMany([]any{true, b}, d.opts.serialiseOptions...)
+		case *T:
+			b, err = d.params.Packer.Pack(*vv)
+			if err != nil {
+				return nil, nil, err
+			}
+			b, _, err = serialise.ToBytesMany([]any{false, b}, d.opts.serialiseOptions...)
+		case []T:
+			tt := make([]any, len(vv)+2)
+			tt[0] = true
+			tt[1] = int64(len(vv))
+			for i := 0; i < len(vv); i++ {
+				tt[i+2], err = d.params.Packer.Pack(vv[i])
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			b, _, err = serialise.ToBytesMany(tt, d.opts.serialiseOptions...)
+		case []*T:
+			tt := make([]any, len(vv)+2)
+			tt[0] = false
+			tt[1] = int64(len(vv))
+			for i := 0; i <= len(vv); i++ {
+				tt[i+2], err = d.params.Packer.Pack(*vv[i])
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			b, _, err = serialise.ToBytesMany(tt, d.opts.serialiseOptions...)
+		default:
+			b, _, err = serialise.ToBytesMany([]any{v}, d.opts.serialiseOptions...)
+		}
 		if err != nil {
 			return nil, nil, err
 		}

@@ -13,6 +13,7 @@ type EncryptedItem[T comparable] struct {
 	attributes   map[string][]byte
 	encryptedKey []byte
 	approach     serialise.Approach
+	packer       IDSerialiser[T]
 }
 
 // GetKey returns the key of this EncryptedItem
@@ -35,12 +36,74 @@ func (e *EncryptedItem[T]) GetValues(ctx context.Context, attrs []string, provid
 
 	for _, attr := range attrs {
 		if b, ok := e.attributes[attr]; ok {
-			v, err := serialise.FromBytes(b, e.approach, serialise.WithAESGCMEncryption(key))
+			v, err := serialise.FromBytesMany(b, e.approach, serialise.WithAESGCMEncryption(key))
 			if err != nil {
 				return nil, err
 			}
+			switch len(v) {
+			case 0:
+				return nil, ErrInvalidDataToUnpack
+			case 1:
+				m[attr] = v[0]
+			case 2:
+				flag, ok := v[0].(bool)
+				if !ok {
+					return nil, ErrInvalidDataToUnpack
+				}
+				b, ok := v[1].([]byte)
+				if !ok {
+					return nil, ErrInvalidDataToUnpack
+				}
+				t, err := e.packer.Unpack(b)
+				if err != nil {
+					return nil, ErrInvalidDataToUnpack
+				}
+				if flag {
+					m[attr] = t
+				} else {
+					m[attr] = &t
+				}
+			default:
+				flag, ok := v[0].(bool)
+				if !ok {
+					return nil, ErrInvalidDataToUnpack
+				}
+				size, ok := v[1].(int64)
+				if !ok {
+					return nil, ErrInvalidDataToUnpack
+				}
 
-			m[attr] = v
+				if flag {
+					tt := make([]T, size)
+					var i int64
+					for i = 0; i < size; i++ {
+						b, ok := v[i+2].([]byte)
+						if !ok {
+							return nil, ErrInvalidDataToUnpack
+						}
+						tt[i], err = e.packer.Unpack(b)
+						if err != nil {
+							return nil, ErrInvalidDataToUnpack
+						}
+					}
+					m[attr] = tt
+				} else {
+					tt := make([]*T, size)
+					var i int64
+					for i = 0; i < size; i++ {
+						b, ok := v[i+2].([]byte)
+						if !ok {
+							return nil, ErrInvalidDataToUnpack
+						}
+						t, err := e.packer.Unpack(b)
+						if err != nil {
+							return nil, ErrInvalidDataToUnpack
+						}
+						tt[i] = &t
+					}
+					m[attr] = tt
+				}
+			}
 		}
 	}
 
