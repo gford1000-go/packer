@@ -11,8 +11,7 @@ import (
 	"github.com/gford1000-go/serialise"
 )
 
-func TestPack(t *testing.T) {
-
+func testCreateEnv(t *testing.T) (func(item *Item[Key]) ([]byte, DataLoader[Key], error), func(data []byte, dataLoader DataLoader[Key]) (*EncryptedItem[Key], error), EnvelopeKeyProvider) {
 	getProvider := func() EnvelopeKeyProvider {
 		ki := &EnvelopeKeyProviderInfo{
 			ID:  "Key1",
@@ -48,7 +47,7 @@ func TestPack(t *testing.T) {
 		return serialiser, nil
 	}
 
-	testPack := func(item *Item[Key]) ([]byte, DataLoader[Key]) {
+	testPack := func(item *Item[Key]) ([]byte, DataLoader[Key], error) {
 
 		pParams := &PackParams[Key]{
 			Provider: provider,
@@ -59,7 +58,7 @@ func TestPack(t *testing.T) {
 
 		info, data, err := Pack[Key](item, pParams)
 		if err != nil {
-			t.Fatalf("Unexpected error during packing: %v", err)
+			return nil, nil, err
 		}
 
 		dataLoader := func(ctx context.Context, keys []Key) (map[string][]byte, error) {
@@ -77,10 +76,10 @@ func TestPack(t *testing.T) {
 			return attrs, nil
 		}
 
-		return info, dataLoader
+		return info, dataLoader, nil
 	}
 
-	testUnpack := func(data []byte, dataLoader DataLoader[Key]) *EncryptedItem[Key] {
+	testUnpack := func(data []byte, dataLoader DataLoader[Key]) (*EncryptedItem[Key], error) {
 
 		uParams := &UnpackParams[Key]{
 			IDRetriever: idRetriever,
@@ -90,11 +89,16 @@ func TestPack(t *testing.T) {
 
 		eItem, err := Unpack(context.TODO(), data, uParams)
 		if err != nil {
-			t.Fatalf("Unexpected error during unpacking: %v", err)
+			return nil, err
 		}
 
-		return eItem
+		return eItem, nil
 	}
+
+	return testPack, testUnpack, provider
+}
+
+func TestPack(t *testing.T) {
 
 	tests := []*Item[Key]{
 		{
@@ -130,9 +134,19 @@ func TestPack(t *testing.T) {
 		},
 	}
 
+	testPack, testUnpack, provider := testCreateEnv(t)
+
 	for i, input := range tests {
 
-		output := testUnpack(testPack(input))
+		b, l, err := testPack(input)
+		if err != nil {
+			t.Fatalf("(%d) Error packing input: %v", i, err)
+		}
+
+		output, err := testUnpack(b, l)
+		if err != nil {
+			t.Fatalf("(%d) Error unpacking input: %v", i, err)
+		}
 
 		if input.Key != output.GetKey() {
 			t.Fatalf("(%d) Mismatch in keys: expected: %s, got: %s", i, input.Key, output.GetKey())
