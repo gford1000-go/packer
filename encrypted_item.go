@@ -27,6 +27,14 @@ func (e *EncryptedItem[T]) GetKey() T {
 // an implementation detail of the EnvelopeKeyProvider; no access checks are performed in GetValues.
 func (e *EncryptedItem[T]) GetValues(ctx context.Context, attrs []string, provider EnvelopeKeyProvider) (map[string]any, error) {
 
+	if len(attrs) == 0 {
+		return map[string]any{}, nil
+	}
+
+	if provider == nil {
+		return nil, ErrProviderIsNil
+	}
+
 	key, err := provider.Decrypt(ctx, e.encryptedKey)
 	if err != nil {
 		return nil, err

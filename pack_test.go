@@ -527,6 +527,246 @@ func TestPack(t *testing.T) {
 	}
 }
 
+func TestUnpack_1(t *testing.T) {
+
+	item, err := Unpack[Key](context.TODO(), nil, nil)
+
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrUnpackNoData) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrUnpackNoData, err)
+	}
+	if item != nil {
+		t.Fatal("Expected item is nil, but is instance")
+	}
+}
+
+func TestUnpack_2(t *testing.T) {
+	packer, _, _ := testCreateEnv(t)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	data, _, err := packer(item)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	i, err := Unpack[Key](context.TODO(), data, nil)
+
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrUnpackNoParams) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrUnpackNoParams, err)
+	}
+	if i != nil {
+		t.Fatal("Expected item is nil, but is instance")
+	}
+
+}
+
+func TestUnpack_3(t *testing.T) {
+	packer, _, _ := testCreateEnv(t)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	data, _, err := packer(item)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	params := &UnpackParams[Key]{}
+
+	i, err := Unpack(context.TODO(), data, params)
+
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrDataLoaderIsNil) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrDataLoaderIsNil, err)
+	}
+	if i != nil {
+		t.Fatal("Expected item is nil, but is instance")
+	}
+
+}
+
+func TestUnpack_4(t *testing.T) {
+	packer, _, _ := testCreateEnv(t)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	params := &UnpackParams[Key]{
+		DataLoader: loader,
+	}
+
+	i, err := Unpack(context.TODO(), data, params)
+
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrIDRetrieverIsNil) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrIDRetrieverIsNil, err)
+	}
+	if i != nil {
+		t.Fatal("Expected item is nil, but is instance")
+	}
+
+}
+
+func TestUnpack_5(t *testing.T) {
+	packer, _, _ := testCreateEnv(t)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	serialiser, err := NewKeySerialiser()
+	if err != nil {
+		t.Fatalf("Unexpected error preparing Key serialiser: %v", err)
+	}
+
+	idRetriever := func(name string) (IDSerialiser[Key], error) {
+		return serialiser, nil
+	}
+
+	params := &UnpackParams[Key]{
+		DataLoader:  loader,
+		IDRetriever: idRetriever,
+	}
+
+	i, err := Unpack(context.TODO(), data, params)
+
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrProviderIsNil) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrProviderIsNil, err)
+	}
+	if i != nil {
+		t.Fatal("Expected item is nil, but is instance")
+	}
+
+}
+
+func TestUnpack_6(t *testing.T) {
+	packer, _, provider := testCreateEnv(t)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	serialiser, err := NewKeySerialiser()
+	if err != nil {
+		t.Fatalf("Unexpected error preparing Key serialiser: %v", err)
+	}
+
+	idRetriever := func(name string) (IDSerialiser[Key], error) {
+		return serialiser, nil
+	}
+
+	params := &UnpackParams[Key]{
+		DataLoader:  loader,
+		IDRetriever: idRetriever,
+		Provider:    provider,
+	}
+
+	i, err := Unpack(context.TODO(), data, params)
+
+	if err != nil {
+		t.Fatal("Unexpected error when expected success", err)
+	}
+	if i == nil {
+		t.Fatal("Expected item is instance, but got nil")
+	}
+
+	if i.GetKey() != item.Key {
+		t.Fatalf("Key mismatch: expected: %v, got: %v", item.Key, i.GetKey())
+	}
+
+	m, err := i.GetValues(context.TODO(), []string{"aaa"}, nil)
+
+	if err == nil {
+		t.Fatal("Unexpected success when expecting error whilst getting values")
+	}
+	if !errors.Is(err, ErrProviderIsNil) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrProviderIsNil, err)
+	}
+	if m != nil {
+		t.Fatal("Expected nil map to be returned, but got instance")
+	}
+
+	if i.GetKey() != item.Key {
+		t.Fatalf("Key mismatch: expected: %v, got: %v", item.Key, i.GetKey())
+	}
+
+	m, err = i.GetValues(context.TODO(), []string{"aaa"}, provider)
+
+	if err != nil {
+		t.Fatalf("Unexpected error when expecting success whilst getting values: %v", err)
+	}
+	if m == nil {
+		t.Fatal("Unexpected nil map returned, when expecting instance")
+	}
+
+	aaav, ok := m["aaa"]
+	if !ok {
+		t.Fatal("Unexpected value for 'aaa' to be returned, but not found")
+	}
+	if aaav.(int8) != int8(10) {
+		t.Fatalf("Unexpected value for 'aaa', expected: %v, got: %v", int8(10), aaav)
+	}
+
+	m, err = i.GetValues(context.TODO(), []string{"bbb"}, provider)
+
+	if err != nil {
+		t.Fatalf("Unexpected error when expecting success whilst getting values: %v", err)
+	}
+	if m == nil {
+		t.Fatal("Unexpected nil map returned, when expecting instance")
+	}
+	if len(m) > 0 {
+		t.Fatalf("Unexpected map returned, expected empty, but got: %v", m)
+	}
+}
+
 func BenchmarkPack(b *testing.B) {
 	packer, _, _ := testCreateEnv(b)
 
