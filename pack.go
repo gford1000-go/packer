@@ -143,7 +143,7 @@ func (p *PackParams[T]) validate() error {
 }
 
 // ErrPackNoAttributes raised when Pack called with an empty map of attribute values
-var ErrPackNoAttributes = errors.New("no attributes to serialsie in call to Pack")
+var ErrPackNoAttributes = errors.New("no attributes to serialise in call to Pack")
 
 // ErrPackNoParams raised when Pack is called without any PackParams specified
 var ErrPackNoParams = errors.New("no PackParams provided")

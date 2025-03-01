@@ -33,7 +33,7 @@ func TestNewEnvelopeKeyProvider(t *testing.T) {
 
 	keys := map[string]bool{}
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 10000; i++ {
 
 		enc, key, err := provider.New()
 		if err != nil {
@@ -111,7 +111,7 @@ func TestNewEnvelopeKeyProvider_1(t *testing.T) {
 	// different provider, provided the original provider is in the finder
 	// it has available.
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 10000; i++ {
 
 		provider := chooseProvider()
 

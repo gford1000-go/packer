@@ -98,6 +98,363 @@ func testCreateEnv(t *testing.T) (func(item *Item[Key]) ([]byte, DataLoader[Key]
 	return testPack, testUnpack, provider
 }
 
+func TestPack_1(t *testing.T) {
+	info, itemData, err := Pack[Key](nil, nil)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrPackNoAttributes) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrPackNoAttributes, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_2(t *testing.T) {
+	item := &Item[Key]{}
+	info, itemData, err := Pack[Key](item, nil)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrPackNoAttributes) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrPackNoAttributes, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_3(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+	}
+	info, itemData, err := Pack(item, nil)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrPackNoAttributes) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrPackNoAttributes, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_4(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+		},
+	}
+	info, itemData, err := Pack(item, nil)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrPackNoParams) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrPackNoParams, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_5(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+		},
+	}
+	params := &PackParams[Key]{}
+	info, itemData, err := Pack(item, params)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrParamsNoProvider) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrParamsNoProvider, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_6(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+		},
+	}
+
+	getProvider := func() EnvelopeKeyProvider {
+		ki := &EnvelopeKeyProviderInfo{
+			ID:  "Key1",
+			Key: []byte("01234567890123456789012345678912"),
+		}
+		m := map[EnvelopeKeyID]EnvelopeKeyProvider{}
+
+		finder := func(id EnvelopeKeyID) (EnvelopeKeyProvider, error) {
+			provider, ok := m[id]
+			if !ok {
+				return nil, errors.New("unknown provider id")
+			}
+			return provider, nil
+		}
+
+		provider, err := NewEnvelopeKeyProvider(ki, finder)
+		if err != nil {
+			t.Fatalf("Unexpected error preparing provider: %v", err)
+		}
+		m[provider.ID()] = provider
+
+		return provider
+	}
+
+	params := &PackParams[Key]{
+		Provider: getProvider(),
+	}
+	info, itemData, err := Pack(item, params)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrParamsNoIDCreator) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrParamsNoIDCreator, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_7(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+		},
+	}
+
+	getProvider := func() EnvelopeKeyProvider {
+		ki := &EnvelopeKeyProviderInfo{
+			ID:  "Key1",
+			Key: []byte("01234567890123456789012345678912"),
+		}
+		m := map[EnvelopeKeyID]EnvelopeKeyProvider{}
+
+		finder := func(id EnvelopeKeyID) (EnvelopeKeyProvider, error) {
+			provider, ok := m[id]
+			if !ok {
+				return nil, errors.New("unknown provider id")
+			}
+			return provider, nil
+		}
+
+		provider, err := NewEnvelopeKeyProvider(ki, finder)
+		if err != nil {
+			t.Fatalf("Unexpected error preparing provider: %v", err)
+		}
+		m[provider.ID()] = provider
+
+		return provider
+	}
+
+	params := &PackParams[Key]{
+		Provider: getProvider(),
+		Creator:  NewKeyCreator(),
+	}
+	info, itemData, err := Pack(item, params)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrParamsNoIDSerialiser) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrParamsNoIDSerialiser, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_8(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+		},
+	}
+
+	getProvider := func() EnvelopeKeyProvider {
+		ki := &EnvelopeKeyProviderInfo{
+			ID:  "Key1",
+			Key: []byte("01234567890123456789012345678912"),
+		}
+		m := map[EnvelopeKeyID]EnvelopeKeyProvider{}
+
+		finder := func(id EnvelopeKeyID) (EnvelopeKeyProvider, error) {
+			provider, ok := m[id]
+			if !ok {
+				return nil, errors.New("unknown provider id")
+			}
+			return provider, nil
+		}
+
+		provider, err := NewEnvelopeKeyProvider(ki, finder)
+		if err != nil {
+			t.Fatalf("Unexpected error preparing provider: %v", err)
+		}
+		m[provider.ID()] = provider
+
+		return provider
+	}
+
+	serialiser, _ := NewKeySerialiser()
+
+	params := &PackParams[Key]{
+		Provider: getProvider(),
+		Creator:  NewKeyCreator(),
+		Packer:   serialiser,
+	}
+	info, itemData, err := Pack(item, params)
+	if err == nil {
+		t.Fatal("Unexpected success when expected error")
+	}
+	if !errors.Is(err, ErrParamsNoApproach) {
+		t.Fatalf("Unexpected error: expected: %v, got: %v", ErrParamsNoApproach, err)
+	}
+	if info != nil {
+		t.Fatal("Expected nil info, but received instance")
+	}
+	if itemData != nil {
+		t.Fatal("Expected nil itemData, but received instance")
+	}
+}
+
+func TestPack_9(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+		},
+	}
+
+	getProvider := func() EnvelopeKeyProvider {
+		ki := &EnvelopeKeyProviderInfo{
+			ID:  "Key1",
+			Key: []byte("01234567890123456789012345678912"),
+		}
+		m := map[EnvelopeKeyID]EnvelopeKeyProvider{}
+
+		finder := func(id EnvelopeKeyID) (EnvelopeKeyProvider, error) {
+			provider, ok := m[id]
+			if !ok {
+				return nil, errors.New("unknown provider id")
+			}
+			return provider, nil
+		}
+
+		provider, err := NewEnvelopeKeyProvider(ki, finder)
+		if err != nil {
+			t.Fatalf("Unexpected error preparing provider: %v", err)
+		}
+		m[provider.ID()] = provider
+
+		return provider
+	}
+
+	serialiser, _ := NewKeySerialiser()
+
+	params := &PackParams[Key]{
+		Provider: getProvider(),
+		Creator:  NewKeyCreator(),
+		Packer:   serialiser,
+		Approach: serialise.Default(),
+	}
+	info, itemData, err := Pack(item, params)
+	if err != nil {
+		t.Fatalf("Unexpected error when expected success: %v", err)
+	}
+	if info == nil {
+		t.Fatal("Expected info, but received nil")
+	}
+	if itemData == nil {
+		t.Fatal("Expected itemData, but received nil")
+	}
+}
+
+func TestPack_10(t *testing.T) {
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"Answer": int64(42),
+			"Life":   string("Hello World"),
+		},
+	}
+
+	getProvider := func() EnvelopeKeyProvider {
+		ki := &EnvelopeKeyProviderInfo{
+			ID:  "Key1",
+			Key: []byte("01234567890123456789012345678912"),
+		}
+		m := map[EnvelopeKeyID]EnvelopeKeyProvider{}
+
+		finder := func(id EnvelopeKeyID) (EnvelopeKeyProvider, error) {
+			provider, ok := m[id]
+			if !ok {
+				return nil, errors.New("unknown provider id")
+			}
+			return provider, nil
+		}
+
+		provider, err := NewEnvelopeKeyProvider(ki, finder)
+		if err != nil {
+			t.Fatalf("Unexpected error preparing provider: %v", err)
+		}
+		m[provider.ID()] = provider
+
+		return provider
+	}
+
+	serialiser, _ := NewKeySerialiser()
+
+	params := &PackParams[Key]{
+		Provider: getProvider(),
+		Creator:  NewKeyCreator(),
+		Packer:   serialiser,
+		Approach: serialise.Default(),
+	}
+	info, itemData, err := Pack(item, params)
+	if err != nil {
+		t.Fatalf("Unexpected error when expected success: %v", err)
+	}
+	if info == nil {
+		t.Fatal("Expected info, but received nil")
+	}
+	if itemData == nil {
+		t.Fatal("Expected itemData, but received nil")
+	}
+}
+
 func TestPack(t *testing.T) {
 
 	tests := []*Item[Key]{
