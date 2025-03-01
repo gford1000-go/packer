@@ -835,6 +835,40 @@ func BenchmarkUnpack_1(b *testing.B) {
 	}
 }
 
+func BenchmarkEncryptedItem_GetValues(b *testing.B) {
+	packer, unpacker, provider := testCreateEnv(b)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"first name": string("Fred"),
+			"last name":  string("Flintstone"),
+			"dob":        time.Date(2000, 1, 1, 12, 43, 30, 0, time.Local),
+			"title":      "Mr",
+			"profession": "Actor",
+		},
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		b.Fatalf("Unexpected error: %v", err)
+	}
+
+	ei, err := unpacker(data, loader)
+	if err != nil {
+		b.Fatalf("Unexpected error: %v", err)
+	}
+
+	ctx := context.TODO()
+
+	for i := 0; i < b.N; i++ {
+		_, err := ei.GetValues(ctx, []string{"first name", "last name", "dob"}, provider)
+		if err != nil {
+			b.Fatalf("Unexpected error: %v", err)
+		}
+	}
+}
+
 // ---------------------------------
 // Value comparison helper functions
 // ---------------------------------
