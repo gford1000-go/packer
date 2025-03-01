@@ -11,7 +11,11 @@ import (
 	"github.com/gford1000-go/serialise"
 )
 
-func testCreateEnv(t *testing.T) (func(item *Item[Key]) ([]byte, DataLoader[Key], error), func(data []byte, dataLoader DataLoader[Key]) (*EncryptedItem[Key], error), EnvelopeKeyProvider) {
+type testHandler interface {
+	Fatalf(string, ...any)
+}
+
+func testCreateEnv(t testHandler) (func(item *Item[Key]) ([]byte, DataLoader[Key], error), func(data []byte, dataLoader DataLoader[Key]) (*EncryptedItem[Key], error), EnvelopeKeyProvider) {
 	getProvider := func() EnvelopeKeyProvider {
 		ki := &EnvelopeKeyProviderInfo{
 			ID:  "Key1",
@@ -519,6 +523,74 @@ func TestPack(t *testing.T) {
 				t.Fatalf("(%d) Unexpected failure to retrieve attribute %s", i, k)
 			}
 			compareValue(v1, v, fmt.Sprintf("%T", v), t)
+		}
+	}
+}
+
+func BenchmarkPack(b *testing.B) {
+	packer, _, _ := testCreateEnv(b)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, _, err := packer(item)
+		if err != nil {
+			b.Fatalf("Unexpected error: %v", err)
+		}
+	}
+}
+
+func BenchmarkUnpack(b *testing.B) {
+	packer, unpacker, _ := testCreateEnv(b)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"aaa": int8(10),
+		},
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		b.Fatalf("Unexpected error: %v", err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, err := unpacker(data, loader)
+		if err != nil {
+			b.Fatalf("Unexpected error: %v", err)
+		}
+	}
+}
+
+func BenchmarkUnpack_1(b *testing.B) {
+	packer, unpacker, _ := testCreateEnv(b)
+
+	item := &Item[Key]{
+		Key: Key{X: "A", Y: "B"},
+		Attributes: map[string]any{
+			"first name": string("Fred"),
+			"last name":  string("Flintstone"),
+			"dob":        time.Date(2000, 1, 1, 12, 43, 30, 0, time.Local),
+			"title":      "Mr",
+			"profession": "Actor",
+		},
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		b.Fatalf("Unexpected error: %v", err)
+	}
+
+	for i := 0; i < b.N; i++ {
+		_, err := unpacker(data, loader)
+		if err != nil {
+			b.Fatalf("Unexpected error: %v", err)
 		}
 	}
 }
