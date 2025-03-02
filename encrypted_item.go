@@ -2,6 +2,7 @@ package packer
 
 import (
 	"context"
+	"sync"
 
 	"github.com/gford1000-go/serialise"
 )
@@ -42,76 +43,125 @@ func (e *EncryptedItem[T]) GetValues(ctx context.Context, attrs []string, provid
 
 	m := map[string]any{}
 
-	for _, attr := range attrs {
-		if b, ok := e.attributes[attr]; ok {
+	type resp struct {
+		a string
+		v any
+		e error
+	}
+
+	c := make(chan *resp, len(attrs))
+	defer close(c)
+
+	var wg sync.WaitGroup
+
+	for i := range attrs {
+		wg.Add(1)
+
+		go func(attr string) {
+			defer wg.Done()
+
+			resp := &resp{a: attr}
+			defer func() { c <- resp }()
+
+			b, ok := e.attributes[attr]
+			if !ok {
+				return
+			}
+
 			v, err := serialise.FromBytesMany(b, e.approach, serialise.WithAESGCMEncryption(key))
 			if err != nil {
-				return nil, err
+				resp.e = err
+				return
 			}
 			switch len(v) {
 			case 0:
-				return nil, ErrInvalidDataToUnpack
+				resp.e = ErrInvalidDataToUnpack
+				return
 			case 1:
-				m[attr] = v[0]
+				resp.v = v[0]
+				return
 			case 2:
 				flag, ok := v[0].(bool)
 				if !ok {
-					return nil, ErrInvalidDataToUnpack
+					resp.e = ErrInvalidDataToUnpack
+					return
 				}
 				b, ok := v[1].([]byte)
 				if !ok {
-					return nil, ErrInvalidDataToUnpack
+					resp.e = ErrInvalidDataToUnpack
+					return
 				}
 				t, err := e.packer.Unpack(b)
 				if err != nil {
-					return nil, ErrInvalidDataToUnpack
+					resp.e = ErrInvalidDataToUnpack
+					return
 				}
 				if flag {
-					m[attr] = t
+					resp.v = t
+					return
 				} else {
-					m[attr] = &t
+					resp.v = &t
+					return
 				}
 			default:
 				flag, ok := v[0].(bool)
 				if !ok {
-					return nil, ErrInvalidDataToUnpack
+					resp.e = ErrInvalidDataToUnpack
+					return
 				}
 				size, ok := v[1].(int64)
 				if !ok {
-					return nil, ErrInvalidDataToUnpack
+					resp.e = ErrInvalidDataToUnpack
+					return
 				}
 
 				if flag {
 					tt := make([]T, size)
-					var i int64
-					for i = 0; i < size; i++ {
+					for i := range size {
 						b, ok := v[i+2].([]byte)
 						if !ok {
-							return nil, ErrInvalidDataToUnpack
+							resp.e = ErrInvalidDataToUnpack
+							return
 						}
 						tt[i], err = e.packer.Unpack(b)
 						if err != nil {
-							return nil, ErrInvalidDataToUnpack
+							resp.e = ErrInvalidDataToUnpack
+							return
 						}
 					}
-					m[attr] = tt
+					resp.v = tt
+					return
 				} else {
 					tt := make([]*T, size)
-					var i int64
-					for i = 0; i < size; i++ {
+					for i := range size {
 						b, ok := v[i+2].([]byte)
 						if !ok {
-							return nil, ErrInvalidDataToUnpack
+							resp.e = ErrInvalidDataToUnpack
+							return
 						}
 						t, err := e.packer.Unpack(b)
 						if err != nil {
-							return nil, ErrInvalidDataToUnpack
+							resp.e = ErrInvalidDataToUnpack
+							return
 						}
 						tt[i] = &t
 					}
-					m[attr] = tt
+					resp.v = tt
+					return
 				}
 			}
+		}(attrs[i])
+	}
+
+	wg.Wait()
+
+	for range len(attrs) {
+		resp := <-c
+		if resp.e != nil {
+			return nil, resp.e
+		}
+		if resp.v != nil {
+			m[resp.a] = resp.v
 		}
 	}
 

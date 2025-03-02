@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -490,7 +491,7 @@ func TestPack(t *testing.T) {
 		{
 			Key: Key{X: "A", Y: "B"},
 			Attributes: map[string]any{
-				"ref": []Key{Key{X: "C", Y: "D"}},
+				"ref": []Key{{X: "C", Y: "D"}},
 			},
 		},
 	}
@@ -524,6 +525,50 @@ func TestPack(t *testing.T) {
 			}
 			compareValue(v1, v, fmt.Sprintf("%T", v), t)
 		}
+	}
+}
+
+func TestPack_11(t *testing.T) {
+
+	nattrs := 1000
+
+	item := &Item[Key]{
+		Key:        Key{X: "A", Y: "B"},
+		Attributes: make(map[string]any, nattrs),
+	}
+
+	ls := strings.Repeat("Hello World;", 100000)
+
+	for i := range nattrs {
+		item.Attributes[fmt.Sprintf("%d", i)] = ls
+	}
+
+	testPack, testUnpack, provider := testCreateEnv(t)
+
+	b, l, err := testPack(item)
+	if err != nil {
+		t.Fatalf("Error packing input: %v", err)
+	}
+
+	output, err := testUnpack(b, l)
+	if err != nil {
+		t.Fatalf("Error unpacking input: %v", err)
+	}
+
+	if item.Key != output.GetKey() {
+		t.Fatalf("Mismatch in keys: expected: %s, got: %s", item.Key, output.GetKey())
+	}
+
+	for k, v := range item.Attributes {
+		m, err := output.GetValues(context.TODO(), []string{k}, provider)
+		if err != nil {
+			t.Fatalf("Unexpected error during value retrieval: %v", err)
+		}
+		v1, ok := m[k]
+		if !ok {
+			t.Fatalf("Unexpected failure to retrieve attribute %s", k)
+		}
+		compareValue(v1, v, fmt.Sprintf("%T", v), t)
 	}
 }
 
@@ -863,6 +908,40 @@ func BenchmarkEncryptedItem_GetValues(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_, err := ei.GetValues(ctx, []string{"first name", "last name", "dob"}, provider)
+		if err != nil {
+			b.Fatalf("Unexpected error: %v", err)
+		}
+	}
+}
+
+var longStr = strings.Repeat("Hello World;", 10000)
+
+func BenchmarkLargeEncryptedItem_GetValues(b *testing.B) {
+	packer, unpacker, provider := testCreateEnv(b)
+
+	item := &Item[Key]{
+		Key:        Key{X: "A", Y: "B"},
+		Attributes: make(map[string]any, 1000),
+	}
+
+	for i := range 100 {
+		item.Attributes[fmt.Sprintf("%d", i)] = longStr
+	}
+
+	data, loader, err := packer(item)
+	if err != nil {
+		b.Fatalf("Unexpected error: %v", err)
+	}
+
+	ei, err := unpacker(data, loader)
+	if err != nil {
+		b.Fatalf("Unexpected error: %v", err)
+	}
+
+	ctx := context.TODO()
+
+	for i := 0; i < b.N; i++ {
+		_, err := ei.GetValues(ctx, []string{"1"}, provider)
 		if err != nil {
 			b.Fatalf("Unexpected error: %v", err)
 		}

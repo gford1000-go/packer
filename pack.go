@@ -152,12 +152,16 @@ var ErrPackNoParams = errors.New("no PackParams provided")
 var ErrUnsupportedPackVersion = errors.New("unsupported pack version requested")
 
 const (
-	defaultAttributeNameSize    uint8       = 3
+	defaultAttributeNameSize    uint8       = 6
 	defaultAttributeNameRetries uint8       = 1
+	minSize                     uint64      = 10 * 1024
 	defaultMaxSize              uint64      = 350 * 1024
 	defaultAttributeMaxSize     uint64      = 100 * 1024
 	defaultPackingVersion       PackVersion = V1
 )
+
+// ErrMaxSizeTooSmall raised if the specified max size is too small to guarantee Pack will be successful
+var ErrMaxSizeTooSmall = errors.New("max size must be greater than 10KB")
 
 // Pack will serialise the contents of the specified item, using the mechanism specified by the params, with
 // optional overrides in behaviour via the options
@@ -195,6 +199,9 @@ func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Opti
 	}
 	if o.maxSize == 0 {
 		o.maxSize = defaultMaxSize
+	}
+	if o.maxSize < minSize {
+		return nil, nil, ErrMaxSizeTooSmall
 	}
 	if o.maxAttrValueSize == 0 {
 		o.maxAttrValueSize = defaultAttributeMaxSize

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/big"
 	"math/rand"
+	"sort"
 
 	"github.com/gford1000-go/serialise"
 )
@@ -193,11 +194,82 @@ func (d *itemPackingDetailsV1[T]) unpack(ctx context.Context, data []byte, envKe
 	return output, nil
 }
 
+type byteSort struct {
+	k string
+	v []byte
+}
+
+type byteSortSet []byteSort
+
+func (b byteSortSet) Len() int           { return len(b) }
+func (b byteSortSet) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b byteSortSet) Less(i, j int) bool { return len(b[i].v) < len(b[j].v) }
+
 func (d *itemPackingDetailsV1[T]) createElements(key T, vals map[string][]byte) ([]T, map[T]map[string][]byte) {
-	// For now, no splitting into elements
-	return []T{key}, map[T]map[string][]byte{
+
+	remaining := int64(d.opts.maxSize - minSize)
+	rest := byteSortSet{}
+
+	for k, v := range vals {
+		remaining -= int64(len(k) + len(v))
+		if remaining < 0 {
+			rest = append(rest, byteSort{k: k, v: v})
+		}
+	}
+
+	outputKeys := []T{key}
+	outputAttSet := map[T]map[string][]byte{
 		key: vals,
 	}
+
+	if len(rest) == 0 {
+		// All attributes contained in a single element - nothing more to do
+		return outputKeys, outputAttSet
+	}
+
+	// Bin pack the remainder
+	sort.Sort(rest)
+
+	type bin struct {
+		size    uint64
+		content []*byteSort
+	}
+
+	var bins []bin
+
+	for _, bs := range rest {
+		placed := false
+		for i := range bins {
+			if bins[i].size+uint64(len(bs.k)+len(bs.v)) < d.opts.maxSize {
+				bins[i].content = append(bins[i].content, &bs)
+				bins[i].size += uint64(len(bs.k) + len(bs.v))
+				placed = true
+				break
+			}
+		}
+		if !placed {
+			newBin := bin{
+				size:    uint64(len(bs.k) + len(bs.v)),
+				content: []*byteSort{&bs},
+			}
+			bins = append(bins, newBin)
+		}
+	}
+
+	// Create elements and allocate bin to each
+	for _, bin := range bins {
+		t := d.params.Creator.ID()
+		outputKeys = append(outputKeys, t)
+
+		m := map[string][]byte{}
+		outputAttSet[t] = m
+
+		for _, c := range bin.content {
+			m[c.k] = c.v
+		}
+	}
+
+	return outputKeys, outputAttSet
 }
 
 func (d *itemPackingDetailsV1[T]) packAttrMap(attrMap map[string][]string) ([]byte, error) {
