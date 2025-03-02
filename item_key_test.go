@@ -321,13 +321,13 @@ func TestNewEnvelopeKeyProvider_Decrypt_3(t *testing.T) {
 		t.Fatalf("Unexpected failure when expected success: %v", err)
 	}
 
-	// Hand-crafted encrypted key fails to deserialise
+	// Hand-crafted encrypted key fails to deserialise - will generate one of two errors
 	b, err = p.Decrypt(context.TODO(), b)
 	if err == nil {
 		t.Fatal("Unexpected success when expected error")
 	}
-	if !errors.Is(err, serialise.ErrMinDataTypeNotDeserialisable) {
-		t.Fatalf("Unexpected error: expected: %v, got: %v", serialise.ErrMinDataTypeNotDeserialisable, err)
+	if !(errors.Is(err, serialise.ErrMinDataTypeNotDeserialisable) || errors.Is(err, serialise.ErrFromBytesInvalidData)) {
+		t.Fatalf("Unexpected error: expected either: '%v' or '%v', got: %v", serialise.ErrMinDataTypeNotDeserialisable, serialise.ErrFromBytesInvalidData, err)
 	}
 	if b != nil {
 		t.Fatal("Unexpected instance returned when expected nil")
