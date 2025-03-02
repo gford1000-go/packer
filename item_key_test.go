@@ -326,8 +326,10 @@ func TestNewEnvelopeKeyProvider_Decrypt_3(t *testing.T) {
 	if err == nil {
 		t.Fatal("Unexpected success when expected error")
 	}
-	if !(errors.Is(err, serialise.ErrMinDataTypeNotDeserialisable) || errors.Is(err, serialise.ErrFromBytesInvalidData)) {
-		t.Fatalf("Unexpected error: expected either: '%v' or '%v', got: %v", serialise.ErrMinDataTypeNotDeserialisable, serialise.ErrFromBytesInvalidData, err)
+	if !(errors.Is(err, serialise.ErrMinDataTypeNotDeserialisable) ||
+		errors.Is(err, serialise.ErrFromBytesManyInvalidData) ||
+		errors.Is(err, serialise.ErrUnexpectedDeserialisationError)) {
+		t.Fatalf("Unexpected error: expected one of: '%v', '%v' or '%v', got: %v", serialise.ErrMinDataTypeNotDeserialisable, serialise.ErrUnexpectedDeserialisationError, serialise.ErrFromBytesManyInvalidData, err)
 	}
 	if b != nil {
 		t.Fatal("Unexpected instance returned when expected nil")
