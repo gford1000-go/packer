@@ -35,7 +35,7 @@ type Options struct {
 }
 
 // WithSerialisationOptions allows options for serialisation to be applied
-func WithSerialisationOptions(o *Options, opts ...func(*serialise.Options)) func(o *Options) {
+func WithSerialisationOptions(opts ...func(*serialise.Options)) func(o *Options) {
 	return func(o *Options) {
 		o.serialiseOptions = opts
 	}
@@ -43,7 +43,7 @@ func WithSerialisationOptions(o *Options, opts ...func(*serialise.Options)) func
 
 // WithMaximumKBSize allows the setting of the maximum size for each returned item.
 // If not set, then any length is allowed (i.e. only one item is returned).
-func WithMaximumKBSize(o *Options, sizeInKB uint16) func(o *Options) {
+func WithMaximumKBSize(sizeInKB uint16) func(o *Options) {
 	return func(o *Options) {
 		o.maxSize = uint64(sizeInKB * 1024)
 	}
@@ -52,21 +52,21 @@ func WithMaximumKBSize(o *Options, sizeInKB uint16) func(o *Options) {
 // WithAttributeValueMaximumKBSize allows the setting of the maximum size for the
 // length of data held in an attribute after Packing.
 // Must be less than the maxSize of the entire item
-func WithAttributeValueMaximumKBSize(o *Options, sizeInKB uint16) func(o *Options) {
+func WithAttributeValueMaximumKBSize(sizeInKB uint16) func(o *Options) {
 	return func(o *Options) {
 		o.maxAttrValueSize = uint64(sizeInKB * 1024)
 	}
 }
 
 // withSeed is only used for testing, to generate a consistent set of attribute names
-func withSeed(o *Options, seed int64) func(o *Options) {
+func withSeed(seed int64) func(o *Options) {
 	return func(o *Options) {
 		o.seed = seed
 	}
 }
 
 // WithAttributeNameSize sets the size of the attribute name
-func WithAttributeNameSize(o *Options, size uint8) func(o *Options) {
+func WithAttributeNameSize(size uint8) func(o *Options) {
 	if size < 2 {
 		panic("AttributeNameSize must be at least two")
 	}
@@ -76,13 +76,13 @@ func WithAttributeNameSize(o *Options, size uint8) func(o *Options) {
 }
 
 // WithAttributeNameRetries sets the number of retries to create a unique attribute name
-func WithAttributeNameRetries(o *Options, retries uint8) func(o *Options) {
+func WithAttributeNameRetries(retries uint8) func(o *Options) {
 	return func(o *Options) {
 		o.attrNameRetries = retries
 	}
 }
 
-func WithPackingVersion(o *Options, version PackVersion) func(o *Options) {
+func WithPackingVersion(version PackVersion) func(o *Options) {
 	if version < UnknownVersion || version >= OutOfRange {
 		panic("invalid PackVerion value provided")
 	}
