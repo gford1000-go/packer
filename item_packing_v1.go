@@ -432,11 +432,12 @@ func (d *itemPackingDetailsV1[T]) createMaps(attrs map[string]any) (map[string][
 	return attrMap, valMap, nil
 }
 
-// ErrUnableToCreateUniqueName raised if a unique attribute name cannot be determined before running out of retries
-var ErrUnableToCreateUniqueName = errors.New("retries exceeded when creating random attribute names - increase the size of attribute names option")
+func createString(size uint8) string {
+	// Use a reduced selection so that attribute names are readable
+	return createStringFromRange("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", size)
+}
 
-func (d *itemPackingDetailsV1[T]) uniqueAttributeName(existing map[string]bool) (string, error) {
-
+func createStringFromRange(choices string, size uint8) string {
 	cryptoRandOffset := func(n int) func() int {
 		return func() int {
 			i, err := c.Int(c.Reader, big.NewInt(int64(n)))
@@ -446,19 +447,23 @@ func (d *itemPackingDetailsV1[T]) uniqueAttributeName(existing map[string]bool) 
 			return int(i.Int64())
 		}
 	}
+	randGen := cryptoRandOffset(len(choices))
 
-	// Use a reduced selection so that attribute names are readable
-	eles := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	randGen := cryptoRandOffset(len(eles))
+	var b = make([]byte, size)
+	for j := range size {
+		b[j] = choices[randGen()]
+	}
+	return string(b)
+}
+
+// ErrUnableToCreateUniqueName raised if a unique attribute name cannot be determined before running out of retries
+var ErrUnableToCreateUniqueName = errors.New("retries exceeded when creating random attribute names - increase the size of attribute names option")
+
+func (d *itemPackingDetailsV1[T]) uniqueAttributeName(existing map[string]bool) (string, error) {
 
 	// Ensure don't loop forever if set of attribute names is exhaused.  Shouldn't happen though.
 	for i := 0; i < int(d.opts.attrNameRetries); i++ {
-		var b = make([]byte, d.opts.attrNameSize)
-		for j := 0; j < int(d.opts.attrNameSize); j++ {
-			b[j] = eles[randGen()]
-		}
-
-		s := string(b)
+		s := createString(d.opts.attrNameSize)
 		if _, ok := existing[s]; !ok {
 			existing[s] = true
 			return s, nil
