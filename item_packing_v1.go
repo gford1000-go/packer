@@ -5,7 +5,6 @@ import (
 	c "crypto/rand"
 	"errors"
 	"math/big"
-	"math/rand"
 	"sort"
 
 	"github.com/gford1000-go/serialise"
@@ -438,13 +437,6 @@ var ErrUnableToCreateUniqueName = errors.New("retries exceeded when creating ran
 
 func (d *itemPackingDetailsV1[T]) uniqueAttributeName(existing map[string]bool) (string, error) {
 
-	mathRandOffset := func(n int) func() int {
-		r := rand.New(rand.NewSource(d.opts.seed))
-		return func() int {
-			return r.Intn(n)
-		}
-	}
-
 	cryptoRandOffset := func(n int) func() int {
 		return func() int {
 			i, err := c.Int(c.Reader, big.NewInt(int64(n)))
@@ -457,13 +449,7 @@ func (d *itemPackingDetailsV1[T]) uniqueAttributeName(existing map[string]bool) 
 
 	// Use a reduced selection so that attribute names are readable
 	eles := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-	var randGen func() int
-	if d.opts.seed != 0 {
-		randGen = mathRandOffset(len(eles)) // Offer deterministic behaviour for testing only
-	} else {
-		randGen = cryptoRandOffset(len(eles))
-	}
+	randGen := cryptoRandOffset(len(eles))
 
 	// Ensure don't loop forever if set of attribute names is exhaused.  Shouldn't happen though.
 	for i := 0; i < int(d.opts.attrNameRetries); i++ {

@@ -26,8 +26,6 @@ type Options struct {
 	maxAttrValueSize uint64
 	// Max size in bytes
 	maxSize uint64
-	// Seed used for testing
-	seed int64
 	// Size of the random attribute names
 	attrNameSize uint8
 	// Number of retries allowed to create unique attribute name
@@ -55,13 +53,6 @@ func WithMaximumKBSize(sizeInKB uint16) func(o *Options) {
 func WithAttributeValueMaximumKBSize(sizeInKB uint16) func(o *Options) {
 	return func(o *Options) {
 		o.maxAttrValueSize = uint64(sizeInKB * 1024)
-	}
-}
-
-// withSeed is only used for testing, to generate a consistent set of attribute names
-func withSeed(seed int64) func(o *Options) {
-	return func(o *Options) {
-		o.seed = seed
 	}
 }
 
