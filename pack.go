@@ -43,7 +43,7 @@ func WithSerialisationOptions(opts ...func(*serialise.Options)) func(o *Options)
 // If not set, then any length is allowed (i.e. only one item is returned).
 func WithMaximumKBSize(sizeInKB uint16) func(o *Options) {
 	return func(o *Options) {
-		o.maxSize = uint64(sizeInKB * 1024)
+		o.maxSize = uint64(sizeInKB) * 1024
 	}
 }
 
@@ -52,7 +52,7 @@ func WithMaximumKBSize(sizeInKB uint16) func(o *Options) {
 // Must be less than the maxSize of the entire item
 func WithAttributeValueMaximumKBSize(sizeInKB uint16) func(o *Options) {
 	return func(o *Options) {
-		o.maxAttrValueSize = uint64(sizeInKB * 1024)
+		o.maxAttrValueSize = uint64(sizeInKB) * 1024
 	}
 }
 
