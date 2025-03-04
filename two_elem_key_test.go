@@ -19,8 +19,8 @@ func TestNewKeyForTesting(t *testing.T) {
 
 func TestNewKey(t *testing.T) {
 
-	a := NewKeyCreator()
-	b := NewKeyCreator()
+	a := NewKeyCreator(defaultLen)
+	b := NewKeyCreator(defaultLen)
 
 	m := map[Key]bool{}
 
@@ -42,7 +42,7 @@ func TestNewKey(t *testing.T) {
 
 func TestNewKeySerialiser(t *testing.T) {
 
-	a := NewKeyCreator()
+	a := NewKeyCreator(defaultLen)
 	k := a.ID()
 
 	s, err := NewKeySerialiser()

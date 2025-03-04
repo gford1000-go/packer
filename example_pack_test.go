@@ -106,7 +106,7 @@ func Example() {
 	// Parameters for packing data
 	pParams := &PackParams[Key]{
 		Provider: provider,
-		Creator:  NewKeyCreator(),
+		Creator:  NewKeyCreator(defaultLen),
 		Packer:   serialiser,
 		Approach: serialise.NewMinDataApproachWithVersion(serialise.V1),
 	}

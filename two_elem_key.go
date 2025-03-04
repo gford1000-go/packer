@@ -2,6 +2,7 @@ package packer
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 
 	"github.com/gford1000-go/serialise"
@@ -13,43 +14,56 @@ type Key struct {
 	Y string
 }
 
-var defaultLen = 16
+var defaultLen uint8 = 16
 
 // NewKeyCreator returns an IDCreator for type Key
-func NewKeyCreator() IDCreator[Key] {
+func NewKeyCreator(size uint8) IDCreator[Key] {
 
-	g := func() string { return createString(16) }
+	g := func() string { return createString(size) }
 
-	return &keyGenerator{g: g}
+	return &keyGenerator{xg: g, yg: g}
+}
+
+// NewKeyCreatorFromKey leaves X unchanged, and adds a random suffix to Y
+func NewKeyCreatorFromKey(key Key, size uint8) IDCreator[Key] {
+
+	xg := func() string { return key.X }
+	yg := func() string { return fmt.Sprintf("%s.%s", key.Y, createString(size)) }
+
+	return &keyGenerator{xg: xg, yg: yg}
 }
 
 // newKeyForTesting returns an IDCreator with deterministic output - only use for testing
 func newKeyCreatorForTesting(seed int64) IDCreator[Key] {
 
-	k := &keyGenerator{}
-
-	k.g = func() string {
+	g := func() string {
 		r := rand.New(rand.NewSource(seed))
 
 		b := []byte{}
-		for i := 0; i < defaultLen; i++ {
+		for range defaultLen {
 			b = append(b, byte(r.Intn(256)))
 		}
 		return string(b)
 	}
 
+	k := &keyGenerator{}
+
+	k.xg = g
+	k.yg = g
+
 	return k
 }
 
 type keyGenerator struct {
-	g func() string
+	xg func() string
+	yg func() string
 }
 
 // ID returns a identifier with a low probability of non-uniqueness
 func (k *keyGenerator) ID() Key {
 	return Key{
-		X: k.g(),
-		Y: k.g(),
+		X: k.xg(),
+		Y: k.yg(),
 	}
 }
 

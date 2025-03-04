@@ -56,7 +56,7 @@ func testCreateEnv(t testHandler) (func(item *Item[Key]) ([]byte, DataLoader[Key
 
 		pParams := &PackParams[Key]{
 			Provider: provider,
-			Creator:  NewKeyCreator(),
+			Creator:  NewKeyCreator(defaultLen),
 			Packer:   serialiser,
 			Approach: serialise.NewMinDataApproachWithVersion(serialise.V1),
 		}
@@ -284,7 +284,7 @@ func TestPack_7(t *testing.T) {
 
 	params := &PackParams[Key]{
 		Provider: getProvider(),
-		Creator:  NewKeyCreator(),
+		Creator:  NewKeyCreator(defaultLen),
 	}
 	info, itemData, err := Pack(item, params)
 	if err == nil {
@@ -337,7 +337,7 @@ func TestPack_8(t *testing.T) {
 
 	params := &PackParams[Key]{
 		Provider: getProvider(),
-		Creator:  NewKeyCreator(),
+		Creator:  NewKeyCreator(defaultLen),
 		Packer:   serialiser,
 	}
 	info, itemData, err := Pack(item, params)
@@ -391,7 +391,7 @@ func TestPack_9(t *testing.T) {
 
 	params := &PackParams[Key]{
 		Provider: getProvider(),
-		Creator:  NewKeyCreator(),
+		Creator:  NewKeyCreator(defaultLen),
 		Packer:   serialiser,
 		Approach: serialise.Default(),
 	}
@@ -444,7 +444,7 @@ func TestPack_10(t *testing.T) {
 
 	params := &PackParams[Key]{
 		Provider: getProvider(),
-		Creator:  NewKeyCreator(),
+		Creator:  NewKeyCreator(defaultLen),
 		Packer:   serialiser,
 		Approach: serialise.Default(),
 	}
