@@ -1,7 +1,6 @@
 package packer
 
 import (
-	c "crypto/rand"
 	"errors"
 	"math/rand"
 
@@ -19,16 +18,7 @@ var defaultLen = 16
 // NewKeyCreator returns an IDCreator for type Key
 func NewKeyCreator() IDCreator[Key] {
 
-	g := func() string {
-
-		randomBytes := make([]byte, 32)
-		_, err := c.Read(randomBytes)
-		if err != nil {
-			panic(err)
-		}
-
-		return string(randomBytes)
-	}
+	g := func() string { return createString(16) }
 
 	return &keyGenerator{g: g}
 }
