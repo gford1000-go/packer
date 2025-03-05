@@ -206,37 +206,21 @@ func (b byteSortSet) Less(i, j int) bool { return len(b[i].v) < len(b[j].v) }
 
 func (d *itemPackingDetailsV1[T]) createElements(key T, vals map[string][]byte) ([]T, map[T]map[string][]byte) {
 
-	remaining := int64(d.opts.maxSize - minSize)
-	rest := byteSortSet{}
-
+	bbs := byteSortSet{}
 	for k, v := range vals {
-		remaining -= int64(len(k) + len(v))
-		if remaining < 0 {
-			rest = append(rest, byteSort{k: k, v: v})
-		}
+		bbs = append(bbs, byteSort{k: k, v: v})
 	}
 
-	outputKeys := []T{key}
-	outputAttSet := map[T]map[string][]byte{
-		key: vals,
-	}
-
-	if len(rest) == 0 {
-		// All attributes contained in a single element - nothing more to do
-		return outputKeys, outputAttSet
-	}
-
-	// Bin pack the remainder
-	sort.Sort(rest)
+	sort.Sort(bbs)
 
 	type bin struct {
 		size    uint64
 		content []*byteSort
 	}
 
+	// Basic binpack,
 	var bins []bin
-
-	for _, bs := range rest {
+	for _, bs := range bbs {
 		placed := false
 		for i := range bins {
 			if bins[i].size+uint64(len(bs.k)+len(bs.v)) < d.opts.maxSize {
@@ -255,14 +239,22 @@ func (d *itemPackingDetailsV1[T]) createElements(key T, vals map[string][]byte) 
 		}
 	}
 
-	// Create elements and allocate bin to each
-	for _, bin := range bins {
-		t := d.params.Creator.ID()
+	outputKeys := []T{}
+	outputAttSet := map[T]map[string][]byte{}
+
+	for i := range bins {
+		var t T
+		if i == 0 {
+			t = key
+		} else {
+			t = d.params.Creator.ID()
+		}
 		outputKeys = append(outputKeys, t)
 
 		m := map[string][]byte{}
 		outputAttSet[t] = m
 
+		bin := bins[i]
 		for _, c := range bin.content {
 			m[c.k] = c.v
 		}
