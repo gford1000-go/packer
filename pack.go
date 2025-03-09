@@ -157,7 +157,39 @@ var ErrMaxSizeTooSmall = errors.New("max size must be greater than 10KB")
 // Pack will serialise the contents of the specified item, using the mechanism specified by the params, with
 // optional overrides in behaviour via the options
 // Packing will default to the selection of defaultPackingVersion for the serialisation, if not overridden.
-func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Options)) (info []byte, itemData map[T]map[string][]byte, e error) {
+func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Options)) ([]byte, map[T]map[string][]byte, error) {
+
+	if item == nil || len(item.Attributes) == 0 {
+		return nil, nil, ErrPackNoAttributes
+	}
+
+	return packItem(item, params, opts...)
+}
+
+// ErrKeyMustNotBeNil raised if the key passed to PackKey() is nil
+var ErrKeyMustNotBeNil = errors.New("the key passed to PackKey() cannot be nil")
+
+// PackKey creates a packed key only
+func PackKey[T comparable](key *T, params *PackParams[T], opts ...func(*Options)) ([]byte, error) {
+	if key == nil {
+		return nil, ErrKeyMustNotBeNil
+	}
+
+	info, _, err := packItem(&Item[T]{Key: *key, Attributes: map[string]any{}}, params, opts...)
+	return info, err
+}
+
+// UnpackKey returns the Key that has been packed using PackKey
+func UnpackKey[T comparable](ctx context.Context, data []byte, params *UnpackParams[T]) (*T, error) {
+	item, err := Unpack(ctx, data, params)
+	if err != nil {
+		return nil, err
+	}
+	return &item.key, nil
+}
+
+// packItem is used by both Pack() and PackKey(), just with different argument checks providing different behaviours
+func packItem[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Options)) (info []byte, itemData map[T]map[string][]byte, e error) {
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -165,9 +197,6 @@ func Pack[T comparable](item *Item[T], params *PackParams[T], opts ...func(*Opti
 		}
 	}()
 
-	if item == nil || len(item.Attributes) == 0 {
-		return nil, nil, ErrPackNoAttributes
-	}
 	if params == nil {
 		return nil, nil, ErrPackNoParams
 	}

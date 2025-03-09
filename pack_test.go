@@ -1135,3 +1135,145 @@ func compareValue(a, b any, name string, t *testing.T) {
 	}
 
 }
+
+func createKeyEnv(t testHandler) (func(*Key) ([]byte, DataLoader[Key], error), func(data []byte, dataLoader DataLoader[Key]) (*Key, error)) {
+
+	getProvider := func() EnvelopeKeyProvider {
+		ki := &EnvelopeKeyProviderInfo{
+			ID:  "Key2",
+			Key: []byte("91234567890123456789012345678912"),
+		}
+		m := map[EnvelopeKeyID]EnvelopeKeyProvider{}
+
+		finder := func(id EnvelopeKeyID) (EnvelopeKeyProvider, error) {
+			provider, ok := m[id]
+			if !ok {
+				return nil, errors.New("unknown provider id")
+			}
+			return provider, nil
+		}
+
+		provider, err := NewEnvelopeKeyProvider(ki, finder)
+		if err != nil {
+			t.Fatalf("Unexpected error preparing provider: %v", err)
+		}
+		m[provider.ID()] = provider
+
+		return provider
+	}
+
+	provider := getProvider()
+
+	serialiser, err := NewKeySerialiser()
+	if err != nil {
+		t.Fatalf("Unexpected error preparing Key serialiser: %v", err)
+	}
+
+	idRetriever := func(name string) (IDSerialiser[Key], error) {
+		return serialiser, nil
+	}
+
+	testPack := func(key *Key) ([]byte, DataLoader[Key], error) {
+
+		pParams := &PackParams[Key]{
+			Provider: provider,
+			Creator:  NewKeyCreator(defaultLen),
+			Packer:   serialiser,
+			Approach: serialise.NewMinDataApproachWithVersion(serialise.V1),
+		}
+
+		info, err := PackKey(key, pParams)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		dataLoader := func(ctx context.Context, keys []Key) (map[string][]byte, error) {
+			return nil, nil
+		}
+
+		return info, dataLoader, nil
+	}
+
+	testUnpack := func(data []byte, dataLoader DataLoader[Key]) (*Key, error) {
+
+		uParams := &UnpackParams[Key]{
+			IDRetriever: idRetriever,
+			Provider:    provider,
+			DataLoader:  dataLoader,
+		}
+
+		key, err := UnpackKey(context.TODO(), data, uParams)
+		if err != nil {
+			return nil, err
+		}
+
+		return key, nil
+	}
+
+	return testPack, testUnpack
+}
+
+func TestPackKey(t *testing.T) {
+
+	p, u := createKeyEnv(t)
+
+	tests := []Key{
+		{
+			X: "ABC",
+			Y: "XYZ",
+		},
+		{
+			X: "ABC",
+			Y: "",
+		},
+		{
+			X: "",
+			Y: "",
+		},
+		{
+			X: "",
+			Y: "XYZ",
+		},
+	}
+
+	for _, test := range tests {
+
+		b, d, err := p(&test)
+		if err != nil {
+			t.Fatalf("Unexpected error during PackKey: %v", err)
+		}
+
+		key2, err := u(b, d)
+		if err != nil {
+			t.Fatalf("Unexpected error during UnpackKey: %v", err)
+		}
+
+		if key2 == nil {
+			t.Fatalf("Unpacked key is nil when should be an instance")
+		}
+
+		if test != *key2 {
+			t.Fatalf("Unexpected mismatch in keys: expected: %v, got: %v", test, *key2)
+		}
+	}
+}
+
+func TestPackKey_1(t *testing.T) {
+
+	p, _ := createKeyEnv(t)
+
+	b, d, err := p(nil)
+	if err == nil {
+		t.Fatal("Unexpected success during PackKey: expected error")
+	}
+	if !errors.Is(err, ErrKeyMustNotBeNil) {
+		t.Fatalf("Unexpected error returned: expected: %v, got: %v", err, ErrKeyMustNotBeNil)
+	}
+
+	if b != nil {
+		t.Fatal("Unexpected []byte returned from PackKey")
+	}
+	if d != nil {
+		t.Fatal("Unexpected DataLoader returned from PackKey")
+	}
+}
